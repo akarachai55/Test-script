@@ -1,0 +1,1649 @@
+-- Greatness Hub | Untitled RPG Game (World 1 & 2 Support) - COMPLETE VERSION
+local Greatness = loadstring(game:HttpGet("https://gist.githubusercontent.com/Sandro2222/1e40185affd3a82a37b0fcbdaf7f27e8/raw/d80400589fb2220421e6e3bca00c7fca961bf7ca/GreatnessUI"))()
+
+-- Create the window
+local Window = Greatness:CreateWindow({
+    Name = "Greatness Hub | Untitled RPG",
+    Keybind = Enum.KeyCode.RightControl
+})
+
+-- Services
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService = game:GetService("UserInputService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local TweenService = game:GetService("TweenService")
+
+local LocalPlayer = Players.LocalPlayer
+
+-- Variables
+local DetectedMobs = {}
+local MobESPObjects = {}
+local FarmConnection = nil
+local AntiDieConnection = nil
+local NoDamageConnection = nil
+local SkillSpamConnection = nil
+local LastDeathPosition = nil
+local CurrentWorld = "World 1"
+local PerformanceMode = true
+
+-- Anti-Cheat Variables
+local MacroSolverEnabled = true
+local IsSolvingMacro = false
+local BlockServerMessages = true
+local AntiBanEnabled = false
+local RandomizeActions = false
+local ActionDelay = 0.1
+local LastActionTime = 0
+local AntiBanConnection = nil
+local OriginalServerMessageFireServer = nil
+local OriginalServerMessageOnClientEvent = nil
+local MacroLoopConnection = nil
+local LastMacroTime = 0
+
+-- Movement Variables
+local FlyEnabled = false
+local NoclipEnabled = false
+local FlySpeed = 50
+local WalkSpeed = 16
+local JumpPower = 50
+local FlyConnection = nil
+local NoclipConnection = nil
+local ClickToTPEnabled = false
+local ClickToTPConnection = nil
+local FarmDistance = 4 -- Default farm distance
+
+-- Feature Toggles
+local NoDamageEnabled = false
+local MobESPEnabled = false
+local AntiDieEnabled = false
+local AutoSkillE = false
+local AutoSkillR = false
+local AutoSkillT = false
+local AutoSkill1 = false
+local AutoSkill2 = false
+local AutoSkill3 = false
+local FarmPosition = "Back"
+local ShowDistance = true
+local ShowCoordinates = false
+
+-- Monster Toggles (COMPLETE - ALL MOBS)
+local MonsterToggles = {
+    -- World 1 Mobs
+    ["고블린"] = false,
+    ["슬라임"] = false,
+    ["갑옷 고블린"] = false,
+    ["동굴 골렘"] = false,
+    ["용암 골렘"] = false,
+    ["마그마 블래스터"] = false,
+    ["샌드 슬라임"] = false,
+    ["미라"] = false,
+    ["피라미드 수호자"] = false,
+    ["무사"] = false,
+    ["선혈의 사무라이"] = false,
+    ["타이탄 아머로드"] = false,
+    ["나락화 박쥐"] = false,
+    ["나락화 수호자"] = false,
+    ["겨울성의 수호신"] = false,
+    ["파괴의 광선, 인큐네이션"] = false,
+    ["예티"] = false,
+    ["눈사람"] = false,
+    ["용암의 화신"] = false,
+    
+    -- World 2 Mobs
+    ["갈색옷 주민"] = false,
+    ["기사 주민"] = false,
+    ["다크 기사단장"] = false,
+    ["더 할루시네이션"] = false,
+    ["마나 광물"] = false,
+    ["마나 광석"] = false,
+    ["서리 늑대"] = false,
+    ["순수한 마나 광석"] = false,
+    ["아르카나"] = false,
+    ["언데드 영혼체"] = false,
+    ["얼어붙은 핏빛"] = false,
+    ["용력석"] = false,
+    ["파라다이스 무사"] = false,
+    ["파라다이스 수장"] = false,
+    ["파란옷 주민"] = false,
+    ["페어리"] = false,
+    ["포자링"] = false,
+    ["크람푸스"] = false,
+}
+
+-- Mob HP Table
+local MobHP = {
+    -- World 1
+    ["고블린"] = 50,
+    ["슬라임"] = 100,
+    ["갑옷 고블린"] = 500,
+    ["동굴 골렘"] = 250,
+    ["용암 골렘"] = 4575,
+    ["마그마 블래스터"] = 2515,
+    ["샌드 슬라임"] = 600,
+    ["미라"] = 1070,
+    ["피라미드 수호자"] = 2010,
+    ["무사"] = 5350,
+    ["선혈의 사무라이"] = 62500,
+    ["타이탄 아머로드"] = 100000,
+    ["나락화 박쥐"] = 10500,
+    ["나락화 수호자"] = 500000,
+    ["겨울성의 수호신"] = 300000,
+    ["파괴의 광선, 인큐네이션"] = 250000,
+    ["예티"] = 150000,
+    ["눈사람"] = 75000,
+    ["용암의 화신"] = 1000000,
+    
+    -- World 2
+    ["갈색옷 주민"] = 250000,
+    ["기사 주민"] = 875000,
+    ["다크 기사단장"] = 8000000,
+    ["더 할루시네이션"] = 25000000,
+    ["마나 광물"] = 350000,
+    ["마나 광석"] = 350000,
+    ["서리 늑대"] = 14000000,
+    ["순수한 마나 광석"] = 10000000,
+    ["아르카나"] = 165000000,
+    ["언데드 영혼체"] = 1500000,
+    ["얼어붙은 핏빛"] = 255000000,
+    ["용력석"] = 350000000,
+    ["파라다이스 무사"] = 6000000,
+    ["파라다이스 수장"] = 105000000,
+    ["파란옷 주민"] = 550000,
+    ["페어리"] = 1000000,
+    ["포자링"] = 400000,
+    ["크람푸스"] = 50000000,
+}
+
+-- Create tabs
+local FarmTab = Window:CreateTab("Auto Farm")
+local MovementTab = Window:CreateTab("Movement")
+local VisualTab = Window:CreateTab("Visual")
+local DefenceTab = Window:CreateTab("Defence")
+local AntiCheatTab = Window:CreateTab("Anti-Cheat")
+local PerformanceTab = Window:CreateTab("Performance")
+
+-- ======== MOVEMENT FUNCTIONS ========
+local function ApplyWalkSpeed()
+    local character = LocalPlayer.Character
+    if character then
+        local humanoid = character:FindFirstChild("Humanoid")
+        if humanoid then
+            humanoid.WalkSpeed = WalkSpeed
+        end
+    end
+end
+
+local function ApplyJumpPower()
+    local character = LocalPlayer.Character
+    if character then
+        local humanoid = character:FindFirstChild("Humanoid")
+        if humanoid then
+            humanoid.JumpPower = JumpPower
+        end
+    end
+end
+
+local function EnableFly()
+    if FlyConnection then 
+        FlyConnection:Disconnect() 
+        FlyConnection = nil
+    end
+    
+    local character = LocalPlayer.Character
+    if not character then return end
+    
+    local rootPart = character:FindFirstChild("HumanoidRootPart")
+    if not rootPart then return end
+    
+    local bodyGyro = Instance.new("BodyGyro")
+    local bodyVelocity = Instance.new("BodyVelocity")
+    
+    bodyGyro.Parent = rootPart
+    bodyGyro.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
+    bodyGyro.P = 9e9
+    
+    bodyVelocity.Parent = rootPart
+    bodyVelocity.MaxForce = Vector3.new(9e9, 9e9, 9e9)
+    bodyVelocity.Velocity = Vector3.new(0, 0, 0)
+    
+    FlyConnection = RunService.Heartbeat:Connect(function()
+        if not FlyEnabled or not character or not rootPart then
+            if bodyGyro then bodyGyro:Destroy() end
+            if bodyVelocity then bodyVelocity:Destroy() end
+            if FlyConnection then
+                FlyConnection:Disconnect()
+                FlyConnection = nil
+            end
+            return
+        end
+        
+        local camera = Workspace.CurrentCamera
+        bodyGyro.CFrame = camera.CFrame
+        
+        local velocity = Vector3.new()
+        if UserInputService:IsKeyDown(Enum.KeyCode.W) then
+            velocity = velocity + (camera.CFrame.LookVector * FlySpeed)
+        end
+        if UserInputService:IsKeyDown(Enum.KeyCode.S) then
+            velocity = velocity - (camera.CFrame.LookVector * FlySpeed)
+        end
+        if UserInputService:IsKeyDown(Enum.KeyCode.A) then
+            velocity = velocity - (camera.CFrame.RightVector * FlySpeed)
+        end
+        if UserInputService:IsKeyDown(Enum.KeyCode.D) then
+            velocity = velocity + (camera.CFrame.RightVector * FlySpeed)
+        end
+        if UserInputService:IsKeyDown(Enum.KeyCode.Space) then
+            velocity = velocity + Vector3.new(0, FlySpeed, 0)
+        end
+        if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then
+            velocity = velocity - Vector3.new(0, FlySpeed, 0)
+        end
+        
+        bodyVelocity.Velocity = velocity
+    end)
+end
+
+local function EnableNoclip()
+    if NoclipConnection then 
+        NoclipConnection:Disconnect() 
+        NoclipConnection = nil
+    end
+    
+    NoclipConnection = RunService.Stepped:Connect(function()
+        if not NoclipEnabled then 
+            if NoclipConnection then
+                NoclipConnection:Disconnect()
+                NoclipConnection = nil
+            end
+            return 
+        end
+        
+        local character = LocalPlayer.Character
+        if character then
+            for _, part in pairs(character:GetDescendants()) do
+                if part:IsA("BasePart") then
+                    part.CanCollide = false
+                end
+            end
+        end
+    end)
+end
+
+local function SetupClickToTP()
+    if ClickToTPConnection then 
+        ClickToTPConnection:Disconnect() 
+        ClickToTPConnection = nil
+    end
+    
+    ClickToTPConnection = UserInputService.InputBegan:Connect(function(input, gameProcessed)
+        if not ClickToTPEnabled or gameProcessed then return end
+        
+        if input.UserInputType == Enum.UserInputType.MouseButton1 and UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then
+            local mouse = LocalPlayer:GetMouse()
+            if mouse.Target then
+                local character = LocalPlayer.Character
+                local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+                if rootPart then
+                    rootPart.CFrame = CFrame.new(mouse.Hit.Position + Vector3.new(0, 3, 0))
+                end
+            end
+        end
+    end)
+end
+
+-- ======== ORIGINAL AUTO MACRO FUNCTIONS ========
+local IsSolvingMacro = false
+local LastMacroTime = 0
+local MacroSolverEnabled = true  -- ตั้ง true เพื่อเปิดใช้งาน
+local MacroLoopConnection = nil
+local RunService = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local LocalPlayer = game.Players.LocalPlayer
+
+local function FindMacroGUI()
+    local playerGui = LocalPlayer:WaitForChild("PlayerGui")
+    local macroGui = nil
+    local keypadButtons = {}  -- Map: {["0"] = button, ["1"] = button, ...}
+
+    -- หา ScreenGui ที่น่าจะเป็น Macro
+    for _, screenGui in pairs(playerGui:GetChildren()) do
+        if screenGui:IsA("ScreenGui") and screenGui.Enabled then
+            local hasMacroText = false
+            for _, gui in pairs(screenGui:GetDescendants()) do
+                if gui:IsA("TextLabel") then
+                    local text = gui.Text
+                    if text and (text:find("숫자") or text:find("코드") or text:find("인증")) then
+                        hasMacroText = true
+                        macroGui = screenGui
+                        break
+                    end
+                end
+            end
+            if hasMacroText then
+                -- หา keypad: TextButton ที่มี Text เป็น 0-9
+                for _, gui in pairs(screenGui:GetDescendants()) do
+                    if gui:IsA("TextButton") and gui.Visible then
+                        local digit = gui.Text:match("^%d$")  -- ต้องเป็นตัวเลขเดี่ยว 0-9
+                        if digit and not keypadButtons[digit] then
+                            keypadButtons[digit] = gui
+                        end
+                    end
+                end
+                -- ตรวจว่าครบ 10 ปุ่มไหม (0-9)
+                if #table.keys(keypadButtons) == 10 then
+                    return macroGui, keypadButtons
+                end
+            end
+        end
+    end
+    return nil, nil
+end
+
+local function ExtractCodeFromMacroGUI(macroGui)
+    if not macroGui then return nil end
+    for _, gui in pairs(macroGui:GetDescendants()) do
+        if gui:IsA("TextLabel") then
+            local text = gui.Text
+            text = string.gsub(text, "숫자", "")
+            text = string.gsub(text, "입력", "")
+            text = string.gsub(text, "코드", "")
+            text = string.gsub(text, ":", "")
+            text = string.gsub(text, "를", "")
+            text = string.gsub(text, " ", "")
+            local code = text:match("%d%d%d%d%d?%d?")  -- 4-6 หลัก
+            if code and #code >= 4 and #code <= 6 then
+                return code
+            end
+        end
+    end
+    return nil
+end
+
+local function TypeCodeSafely(macroGui, keypadButtons, code)
+    if not macroGui or not keypadButtons or not code then return end
+    
+    -- กดปุ่มตามแต่ละ digit ใน code
+    for i = 1, #code do
+        local digit = code:sub(i, i)
+        local button = keypadButtons[digit]
+        if button then
+            pcall(function()
+                button:Fire("MouseButton1Click")
+            end)
+            task.wait(0.1 + math.random() * 0.05)  -- Delay เล็กน้อย + random เพื่อเลี่ยง detection
+        else
+            warn("ไม่พบปุ่มสำหรับ digit: " .. digit)
+            return
+        end
+    end
+    
+    -- กด submit ถ้ามี (เช่น "확인" หรือ "제출")
+    task.wait(0.2)
+    for _, gui in pairs(macroGui:GetDescendants()) do
+        if gui:IsA("TextButton") then
+            local text = gui.Text
+            if text:find("확인") or text:find("제출") or text:find("인증") or text:find("완료") then
+                pcall(function()
+                    gui:Fire("MouseButton1Click")
+                end)
+                break
+            end
+        end
+    end
+    
+    -- พยายาม fire remote ถ้ายังมี (เผื่อเกมยังใช้)
+    pcall(function()
+        local remote = ReplicatedStorage.Remote.Macro
+        if remote then
+            remote:FireServer(code)
+        end
+    end)
+end
+
+local function SolveMacro()
+    if IsSolvingMacro or tick() - LastMacroTime < 2 then return end
+    local macroGui, keypadButtons = FindMacroGUI()
+    if not macroGui or not keypadButtons then return end
+    
+    local isMacroGUI = false
+    for _, gui in pairs(macroGui:GetDescendants()) do
+        if gui:IsA("TextLabel") then
+            local text = gui.Text
+            if text and (text:find("숫자") or text:find("코드") or text:find("인증")) then
+                isMacroGUI = true
+                break
+            end
+        end
+    end
+    if not isMacroGUI then return end
+    
+    IsSolvingMacro = true
+    LastMacroTime = tick()
+    local code = ExtractCodeFromMacroGUI(macroGui)
+    if not code then
+        IsSolvingMacro = false
+        return
+    end
+    
+    TypeCodeSafely(macroGui, keypadButtons, code)
+    
+    -- ปิดหน้าต่างถ้ามีปุ่ม X
+    task.wait(0.5)
+    for _, gui in pairs(macroGui:GetDescendants()) do
+        if gui:IsA("TextButton") and (gui.Text == "X" or gui.Text == "×" or gui.Text == "닫기") then
+            pcall(function()
+                gui:Fire("MouseButton1Click")
+            end)
+            break
+        end
+    end
+    IsSolvingMacro = false
+end
+
+local function StartMacroSolverLoop()
+    if MacroLoopConnection then
+        MacroLoopConnection:Disconnect()
+        MacroLoopConnection = nil
+    end
+    local lastCheck = 0
+    MacroLoopConnection = RunService.Heartbeat:Connect(function()
+        if tick() - lastCheck >= 1 then
+            lastCheck = tick()
+            if MacroSolverEnabled and not IsSolvingMacro then
+                SolveMacro()
+            end
+        end
+    end)
+end
+
+local function StopMacroSolverLoop()
+    if MacroLoopConnection then
+        MacroLoopConnection:Disconnect()
+        MacroLoopConnection = nil
+    end
+end
+
+-- เรียกใช้งาน loop (ถ้าต้องการเปิดอัตโนมัติ)
+StartMacroSolverLoop()
+
+-- ======== NUCLEAR MACRO ELIMINATOR ========
+local function NuclearMacroEliminator()
+    pcall(function()
+        local macroRemote = ReplicatedStorage.Remote:FindFirstChild("Macro")
+        if macroRemote then
+            macroRemote:Destroy()
+        end
+    end)
+    
+    pcall(function()
+        local playerGui = LocalPlayer:WaitForChild("PlayerGui")
+        for _, gui in pairs(playerGui:GetChildren()) do
+            if gui:IsA("ScreenGui") and (gui.Name == "Macro" or gui.Name:find("Captcha")) then
+                gui:Destroy()
+            end
+        end
+    end)
+    
+    pcall(function()
+        local playerGui = LocalPlayer:WaitForChild("PlayerGui")
+        playerGui.ChildAdded:Connect(function(child)
+            if child:IsA("ScreenGui") and (child.Name == "Macro" or child.Name:find("Captcha")) then
+                task.wait(0.05)
+                child:Destroy()
+            end
+        end)
+    end)
+end
+
+-- ======== ANTI-CHEAT FUNCTIONS ========
+local function SetupServerMessageBlock()
+    local success, serverMessage = pcall(function()
+        local remoteFolder = ReplicatedStorage:WaitForChild("Remote")
+        if remoteFolder then
+            return remoteFolder:WaitForChild("ServerMessage")
+        end
+    end)
+    
+    if success and serverMessage then
+        if serverMessage:IsA("RemoteEvent") then
+            OriginalServerMessageFireServer = serverMessage.FireServer
+            serverMessage.FireServer = function(self, ...)
+                if BlockServerMessages then
+                    return nil
+                end
+                return OriginalServerMessageFireServer(self, ...)
+            end
+        end
+        
+        if serverMessage:IsA("RemoteEvent") then
+            OriginalServerMessageOnClientEvent = serverMessage.OnClientEvent
+            serverMessage.OnClientEvent = function(...)
+                if BlockServerMessages then
+                    return nil
+                end
+                return OriginalServerMessageOnClientEvent(...)
+            end
+        end
+    end
+end
+
+local function RemoveServerMessageBlock()
+    local success, serverMessage = pcall(function()
+        local remoteFolder = ReplicatedStorage:WaitForChild("Remote")
+        if remoteFolder then
+            return remoteFolder:WaitForChild("ServerMessage")
+        end
+    end)
+    
+    if success and serverMessage then
+        if OriginalServerMessageFireServer then
+            serverMessage.FireServer = OriginalServerMessageFireServer
+        end
+        if OriginalServerMessageOnClientEvent then
+            serverMessage.OnClientEvent = OriginalServerMessageOnClientEvent
+        end
+    end
+end
+
+-- ======== ANTI-BAN SYSTEM ========
+local function EnableAntiBan()
+    if AntiBanConnection then 
+        AntiBanConnection:Disconnect() 
+        AntiBanConnection = nil
+    end
+    
+    AntiBanConnection = RunService.Heartbeat:Connect(function()
+        if not AntiBanEnabled then return end
+        
+        RandomizeActions = true
+        
+        if math.random(1, 100) == 1 then
+            local character = LocalPlayer.Character
+            if character then
+                local rootPart = character:FindFirstChild("HumanoidRootPart")
+                if rootPart then
+                    local randomCF = CFrame.new(rootPart.Position) * CFrame.Angles(0, math.rad(math.random(0, 360)), 0)
+                    rootPart.CFrame = rootPart.CFrame:Lerp(randomCF, 0.1)
+                end
+            end
+        end
+    end)
+end
+
+local function DisableAntiBan()
+    if AntiBanConnection then
+        AntiBanConnection:Disconnect()
+        AntiBanConnection = nil
+    end
+    RandomizeActions = false
+end
+
+-- ======== OPTIMIZED SKILL SPAM ========
+local function StartAutoSkills()
+    if SkillSpamConnection then 
+        SkillSpamConnection:Disconnect() 
+        SkillSpamConnection = nil
+    end
+    
+    SkillSpamConnection = RunService.Heartbeat:Connect(function()
+        local delay = RandomizeActions and (0.05 + math.random() * 0.1) or 0.05
+        
+        if AutoSkillE then
+            VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+            task.wait(delay)
+            VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+        end
+        
+        if AutoSkillR then
+            VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.R, false, game)
+            task.wait(delay)
+            VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.R, false, game)
+        end
+        
+        if AutoSkillT then
+            VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.T, false, game)
+            task.wait(delay)
+            VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.T, false, game)
+        end
+        
+        if AutoSkill1 then
+            VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.One, false, game)
+            task.wait(delay)
+            VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.One, false, game)
+        end
+        
+        if AutoSkill2 then
+            VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.Two, false, game)
+            task.wait(delay)
+            VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Two, false, game)
+        end
+        
+        if AutoSkill3 then
+            VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.Three, false, game)
+            task.wait(delay)
+            VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Three, false, game)
+        end
+        
+        if RandomizeActions then
+            task.wait(0.05 + math.random() * 0.15)
+        else
+            task.wait(0.1)
+        end
+    end)
+end
+
+local function StopAutoSkills()
+    if SkillSpamConnection then
+        SkillSpamConnection:Disconnect()
+        SkillSpamConnection = nil
+    end
+end
+
+-- ======== FIXED NO DAMAGE SYSTEM ========
+local function EnableNoDamage()
+    if NoDamageConnection then return end
+    
+    NoDamageConnection = RunService.Heartbeat:Connect(function()
+        if not NoDamageEnabled then return end
+        
+        local character = LocalPlayer.Character
+        if character then
+            local humanoid = character:FindFirstChild("Humanoid")
+            if humanoid then
+                if humanoid.Health < humanoid.MaxHealth then
+                    humanoid.Health = humanoid.MaxHealth
+                end
+                
+                if humanoid.Health <= 0 then
+                    humanoid.Health = humanoid.MaxHealth
+                end
+            end
+        end
+    end)
+end
+
+local function DisableNoDamage()
+    if NoDamageConnection then
+        NoDamageConnection:Disconnect()
+        NoDamageConnection = nil
+    end
+end
+
+-- ======== FIXED ANTI-DIE SYSTEM ========
+local function EnableAntiDie()
+    if AntiDieConnection then 
+        AntiDieConnection:Disconnect() 
+        AntiDieConnection = nil
+    end
+    
+    AntiDieConnection = RunService.Heartbeat:Connect(function()
+        if not AntiDieEnabled then return end
+        
+        local character = LocalPlayer.Character
+        if character then
+            local humanoid = character:FindFirstChild("Humanoid")
+            local rootPart = character:FindFirstChild("HumanoidRootPart")
+            
+            if humanoid and rootPart then
+                if humanoid.Health > 0 then
+                    LastDeathPosition = rootPart.Position
+                end
+                
+                if humanoid.Health <= 10 then
+                    humanoid.Health = humanoid.MaxHealth
+                end
+            end
+        end
+    end)
+    
+    LocalPlayer.CharacterAdded:Connect(function(character)
+        task.wait(1)
+        
+        if AntiDieEnabled and LastDeathPosition then
+            local rootPart = character:WaitForChild("HumanoidRootPart", 2)
+            if rootPart then
+                rootPart.CFrame = CFrame.new(LastDeathPosition)
+            end
+        end
+    end)
+end
+
+local function DisableAntiDie()
+    if AntiDieConnection then
+        AntiDieConnection:Disconnect()
+        AntiDieConnection = nil
+    end
+end
+
+-- ======== AUTO FARM FUNCTIONS ========
+local function ScanForMobs()
+    DetectedMobs = {}
+    
+    local mobsFolder = Workspace:FindFirstChild("Mobs")
+    if mobsFolder then
+        for _, mob in pairs(mobsFolder:GetChildren()) do
+            if mob:IsA("Model") and mob:FindFirstChild("Humanoid") and mob:FindFirstChild("HumanoidRootPart") then
+                if mob.Humanoid.Health > 0 then
+                    DetectedMobs[mob] = mob.Name
+                end
+            end
+        end
+    end
+    
+    for _, obj in pairs(Workspace:GetDescendants()) do
+        if obj:IsA("Model") and obj:FindFirstChild("Humanoid") and obj:FindFirstChild("HumanoidRootPart") then
+            local mobName = obj.Name
+            if MonsterToggles[mobName] and obj.Humanoid.Health > 0 then
+                DetectedMobs[obj] = mobName
+            end
+        end
+    end
+    
+    for _, obj in pairs(Workspace:GetChildren()) do
+        if obj:IsA("Model") and obj.Name == "용암의 화신" and obj:FindFirstChild("Humanoid") then
+            if obj.Humanoid.Health > 0 then
+                DetectedMobs[obj] = "용암의 화신"
+            end
+        end
+    end
+    
+    return DetectedMobs
+end
+
+local function GetClosestMob()
+    local character = LocalPlayer.Character
+    local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+    if not rootPart then return nil, nil, nil end
+    
+    local closestMob = nil
+    local closestDistance = math.huge
+    local mobPosition = nil
+    
+    for mob, koreanName in pairs(DetectedMobs) do
+        if mob and mob.Parent and mob:FindFirstChild("HumanoidRootPart") then
+            local humanoid = mob:FindFirstChild("Humanoid")
+            if humanoid and humanoid.Health > 0 then
+                if MonsterToggles[koreanName] then
+                    local distance = (mob.HumanoidRootPart.Position - rootPart.Position).Magnitude
+                    if distance < closestDistance then
+                        closestMob = mob
+                        closestDistance = distance
+                        mobPosition = mob.HumanoidRootPart.Position
+                    end
+                end
+            end
+        end
+    end
+    
+    return closestMob, closestDistance, mobPosition
+end
+
+local function TeleportToMob(mob)
+    local character = LocalPlayer.Character
+    local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+    if not rootPart or not mob or not mob:FindFirstChild("HumanoidRootPart") then return end
+    
+    local mobPosition = mob.HumanoidRootPart.Position
+    local mobLookVector = mob.HumanoidRootPart.CFrame.LookVector
+    local mobRightVector = mob.HumanoidRootPart.CFrame.RightVector
+    
+    local teleportPosition
+    
+    if FarmPosition == "Back" then
+        teleportPosition = mobPosition - (mobLookVector * FarmDistance)
+        teleportPosition = Vector3.new(teleportPosition.X, mobPosition.Y, teleportPosition.Z)
+    elseif FarmPosition == "Front" then
+        teleportPosition = mobPosition + (mobLookVector * FarmDistance)
+        teleportPosition = Vector3.new(teleportPosition.X, mobPosition.Y, teleportPosition.Z)
+    elseif FarmPosition == "Above" then
+        teleportPosition = mobPosition + Vector3.new(0, FarmDistance + 4, 0)
+    elseif FarmPosition == "Left" then
+        teleportPosition = mobPosition - (mobRightVector * FarmDistance)
+        teleportPosition = Vector3.new(teleportPosition.X, mobPosition.Y, teleportPosition.Z)
+    elseif FarmPosition == "Right" then
+        teleportPosition = mobPosition + (mobRightVector * FarmDistance)
+        teleportPosition = Vector3.new(teleportPosition.X, mobPosition.Y, teleportPosition.Z)
+    end
+    
+    local rayOrigin = teleportPosition + Vector3.new(0, 10, 0)
+    local rayDirection = Vector3.new(0, -20, 0)
+    local raycastParams = RaycastParams.new()
+    raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
+    raycastParams.FilterDescendantsInstances = {character}
+    
+    local raycastResult = Workspace:Raycast(rayOrigin, rayDirection, raycastParams)
+    
+    if raycastResult then
+        teleportPosition = Vector3.new(teleportPosition.X, raycastResult.Position.Y + 3, teleportPosition.Z)
+    else
+        teleportPosition = Vector3.new(teleportPosition.X, mobPosition.Y, teleportPosition.Z)
+    end
+    
+    rootPart.CFrame = CFrame.new(teleportPosition, mobPosition)
+end
+
+local function AttackMob(mob)
+    if not mob or not mob:FindFirstChild("HumanoidRootPart") then return end
+    
+    local damage = 999999
+    
+    pcall(function()
+        ReplicatedStorage.Remote.HitBox:FireServer({
+            Hit = mob.HumanoidRootPart,
+            Damage = damage,
+            Character = LocalPlayer.Character
+        })
+    end)
+    
+    pcall(function()
+        ReplicatedStorage.Remote.Skill:FireServer("Attack", mob.HumanoidRootPart, damage)
+    end)
+    
+    pcall(function()
+        ReplicatedStorage.Remote.Emit:FireServer("Hit", mob.HumanoidRootPart, damage)
+    end)
+    
+    pcall(function()
+        ReplicatedStorage.Remote.HitBox:FireServer(mob.HumanoidRootPart, damage)
+    end)
+    
+    local character = LocalPlayer.Character
+    if character then
+        for _, tool in pairs(character:GetChildren()) do
+            if tool:IsA("Tool") then
+                tool:Activate()
+            end
+        end
+    end
+end
+
+local function StartAutoFarm()
+    if FarmConnection then 
+        FarmConnection:Disconnect() 
+        FarmConnection = nil
+    end
+    
+    local lastScanTime = 0
+    local scanInterval = PerformanceMode and 2 or 1
+    
+    FarmConnection = RunService.Heartbeat:Connect(function()
+        if tick() - LastActionTime < ActionDelay then return end
+        LastActionTime = tick()
+        
+        if tick() - lastScanTime > scanInterval then
+            ScanForMobs()
+            lastScanTime = tick()
+        end
+        
+        local closestMob, distance, mobPosition = GetClosestMob()
+        if closestMob then
+            TeleportToMob(closestMob)
+            AttackMob(closestMob)
+            
+            if ShowDistance and distance then
+                if ShowCoordinates and mobPosition then
+                    print(string.format("📏 Target: %s | Distance: %.1f | Position: X:%.0f Y:%.0f Z:%.0f", 
+                        closestMob.Name, distance, mobPosition.X, mobPosition.Y, mobPosition.Z))
+                else
+                    print(string.format("📏 Target: %s | Distance: %.1f", closestMob.Name, distance))
+                end
+            end
+        end
+    end)
+end
+
+local function StopAutoFarm()
+    if FarmConnection then
+        FarmConnection:Disconnect()
+        FarmConnection = nil
+    end
+end
+
+local function CheckIfAnyMonsterEnabled()
+    for monster, enabled in pairs(MonsterToggles) do
+        if enabled then
+            StartAutoFarm()
+            return true
+        end
+    end
+    StopAutoFarm()
+    return false
+end
+
+-- ======== OPTIMIZED ESP SYSTEM ========
+local function UpdateESP()
+    for mob, esp in pairs(MobESPObjects) do
+        if esp then
+            for _, drawing in pairs(esp) do
+                pcall(function() drawing:Remove() end)
+            end
+        end
+    end
+    MobESPObjects = {}
+    
+    local updateCount = 0
+    local maxUpdates = PerformanceMode and 15 or 30
+    
+    for mob, koreanName in pairs(DetectedMobs) do
+        if updateCount >= maxUpdates then break end
+        
+        if mob and mob.Parent and mob:FindFirstChild("HumanoidRootPart") then
+            local humanoid = mob:FindFirstChild("Humanoid")
+            if humanoid and humanoid.Health > 0 then
+                local esp = {
+                    Box = Drawing.new("Square"),
+                    Name = Drawing.new("Text"),
+                    Health = Drawing.new("Text"),
+                    Distance = Drawing.new("Text")
+                }
+                
+                esp.Box.Visible = false
+                esp.Box.Color = Color3.fromRGB(255, 0, 0)
+                esp.Box.Thickness = 1
+                esp.Box.Filled = false
+                
+                esp.Name.Visible = false
+                esp.Name.Color = Color3.fromRGB(255, 255, 255)
+                esp.Name.Size = PerformanceMode and 12 or 14
+                esp.Name.Text = koreanName
+                esp.Name.Center = true
+                
+                esp.Health.Visible = false
+                esp.Health.Color = Color3.fromRGB(0, 255, 0)
+                esp.Health.Size = PerformanceMode and 10 or 12
+                esp.Health.Center = true
+                
+                esp.Distance.Visible = false
+                esp.Distance.Color = Color3.fromRGB(255, 255, 0)
+                esp.Distance.Size = PerformanceMode and 10 or 12
+                esp.Distance.Center = true
+                
+                MobESPObjects[mob] = esp
+                updateCount = updateCount + 1
+            end
+        end
+    end
+end
+
+local function UpdateESPVisual(mob)
+    local esp = MobESPObjects[mob]
+    if not esp or not mob.Parent or not mob:FindFirstChild("HumanoidRootPart") then
+        if esp then
+            for _, drawing in pairs(esp) do
+                pcall(function() drawing:Remove() end)
+            end
+            MobESPObjects[mob] = nil
+        end
+        return
+    end
+    
+    local humanoid = mob:FindFirstChild("Humanoid")
+    if not humanoid or humanoid.Health <= 0 then
+        if esp then
+            for _, drawing in pairs(esp) do
+                pcall(function() drawing:Remove() end)
+            end
+            MobESPObjects[mob] = nil
+        end
+        return
+    end
+    
+    local rootPos, onScreen = Workspace.CurrentCamera:WorldToViewportPoint(mob.HumanoidRootPart.Position)
+    if not onScreen then
+        esp.Box.Visible = false
+        esp.Name.Visible = false
+        esp.Health.Visible = false
+        esp.Distance.Visible = false
+        return
+    end
+    
+    local isVisible = MobESPEnabled
+    esp.Box.Visible = isVisible
+    esp.Name.Visible = isVisible
+    esp.Health.Visible = isVisible
+    esp.Distance.Visible = isVisible and ShowDistance
+    
+    local headPos = Workspace.CurrentCamera:WorldToViewportPoint(mob.HumanoidRootPart.Position + Vector3.new(0, 2, 0))
+    local width = math.abs(headPos.X - rootPos.X) * 1.5
+    local height = (headPos.Y - rootPos.Y) * 1.5
+    
+    esp.Box.Size = Vector2.new(width, height)
+    esp.Box.Position = Vector2.new(rootPos.X - width/2, rootPos.Y - height/2)
+    
+    esp.Name.Position = Vector2.new(rootPos.X, rootPos.Y - height/2 - 15)
+    
+    esp.Health.Text = math.floor(humanoid.Health) .. "/" .. math.floor(humanoid.MaxHealth)
+    esp.Health.Position = Vector2.new(rootPos.X, rootPos.Y - height/2 - 30)
+    
+    local character = LocalPlayer.Character
+    local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+    if rootPart and ShowDistance then
+        local distance = (rootPart.Position - mob.HumanoidRootPart.Position).Magnitude
+        
+        if ShowCoordinates then
+            esp.Distance.Text = string.format("Dist: %.1f | X:%.0f Y:%.0f Z:%.0f", 
+                distance, mob.HumanoidRootPart.Position.X, mob.HumanoidRootPart.Position.Y, mob.HumanoidRootPart.Position.Z)
+        else
+            esp.Distance.Text = "Distance: " .. math.floor(distance)
+        end
+        esp.Distance.Position = Vector2.new(rootPos.X, rootPos.Y + height/2 + 5)
+    end
+end
+
+local function ClearESP()
+    for mob, esp in pairs(MobESPObjects) do
+        if esp then
+            for _, drawing in pairs(esp) do
+                pcall(function() drawing:Remove() end)
+            end
+        end
+    end
+    MobESPObjects = {}
+end
+
+-- ======== PERFORMANCE OPTIMIZATION ========
+local function OptimizePerformance()
+    if PerformanceMode then
+        ActionDelay = 0.15
+    else
+        ActionDelay = 0.1
+    end
+end
+
+-- ======== GUI ELEMENTS ========
+
+-- Farm Tab
+Window:CreateSlider(FarmTab, {
+    Name = "Farm Distance",
+    Default = 4,
+    Min = 1,
+    Max = 20,
+    Callback = function(value)
+        FarmDistance = value
+    end
+})
+
+Window:CreateLabel(FarmTab, {
+    Text = "Select Farming Position:",
+    TextSize = 14
+})
+
+Window:CreateButton(FarmTab, {
+    Name = "Back Position (Safe)",
+    Callback = function()
+        FarmPosition = "Back"
+    end
+})
+
+Window:CreateButton(FarmTab, {
+    Name = "Front Position (Aggressive)",
+    Callback = function()
+        FarmPosition = "Front"
+    end
+})
+
+Window:CreateButton(FarmTab, {
+    Name = "Above Position (Air)",
+    Callback = function()
+        FarmPosition = "Above"
+    end
+})
+
+Window:CreateButton(FarmTab, {
+    Name = "Left Position (Close Side)",
+    Callback = function()
+        FarmPosition = "Left"
+    end
+})
+
+Window:CreateButton(FarmTab, {
+    Name = "Right Position (Close Side)",
+    Callback = function()
+        FarmPosition = "Right"
+    end
+})
+
+Window:CreateLabel(FarmTab, {
+    Text = "TP to Mobs:",
+    TextSize = 14
+})
+
+Window:CreateButton(FarmTab, {
+    Name = "Teleport to Closest Mob",
+    Callback = function()
+        local closestMob, distance, position = GetClosestMob()
+        if closestMob then
+            TeleportToMob(closestMob)
+            print("Teleported to: " .. closestMob.Name)
+        else
+            print("No mobs found!")
+        end
+    end
+})
+
+Window:CreateButton(FarmTab, {
+    Name = "Refresh Mobs List",
+    Callback = function()
+        ScanForMobs()
+        local count = 0
+        for _ in pairs(DetectedMobs) do count = count + 1 end
+        print("Refreshed: " .. count .. " mobs found")
+    end
+})
+
+Window:CreateButton(FarmTab, {
+    Name = "Start Auto Farm",
+    Callback = function()
+        StartAutoFarm()
+        print("Auto Farm: Started")
+    end
+})
+
+Window:CreateButton(FarmTab, {
+    Name = "Stop Auto Farm",
+    Callback = function()
+        StopAutoFarm()
+        print("Auto Farm: Stopped")
+    end
+})
+
+-- Create all 36 mob toggles
+Window:CreateLabel(FarmTab, {
+    Text = "--- World 1 Mobs (Early Game) ---",
+    TextSize = 12
+})
+
+local world1Mobs = {
+    "고블린", "슬라임", "갑옷 고블린", "동굴 골렘", "용암 골렘", "마그마 블래스터",
+    "샌드 슬라임", "미라", "피라미드 수호자", "무사", "선혈의 사무라이", "타이탄 아머로드",
+    "나락화 박쥐", "나락화 수호자", "겨울성의 수호신", "파괴의 광선, 인큐네이션",
+    "예티", "눈사람", "용암의 화신"
+}
+
+for _, mob in ipairs(world1Mobs) do
+    Window:CreateToggle(FarmTab, {
+        Name = mob .. " - HP: " .. tostring(MobHP[mob]),
+        Default = false,
+        Callback = function(value)
+            MonsterToggles[mob] = value
+            if value then
+                CheckIfAnyMonsterEnabled()
+            else
+                CheckIfAnyMonsterEnabled()
+            end
+        end
+    })
+end
+
+Window:CreateLabel(FarmTab, {
+    Text = "--- World 2 Mobs (End Game) ---",
+    TextSize = 12
+})
+
+local world2Mobs = {
+    "갈색옷 주민", "기사 주민", "다크 기사단장", "더 할루시네이션", "마나 광물", "마나 광석",
+    "서리 늑대", "순수한 마나 광석", "아르카나", "언데드 영혼체", "얼어붙은 핏빛", "용력석",
+    "파라다이스 무사", "파라다이스 수장", "파란옷 주민", "페어리", "포자링", "크람푸스"
+}
+
+for _, mob in ipairs(world2Mobs) do
+    Window:CreateToggle(FarmTab, {
+        Name = mob .. " - HP: " .. tostring(MobHP[mob]),
+        Default = false,
+        Callback = function(value)
+            MonsterToggles[mob] = value
+            if value then
+                CheckIfAnyMonsterEnabled()
+            else
+                CheckIfAnyMonsterEnabled()
+            end
+        end
+    })
+end
+
+-- Auto Skill Toggles
+Window:CreateLabel(FarmTab, {
+    Text = "Auto Skill Spam:",
+    TextSize = 14
+})
+
+local skillToggles = {
+    {Name = "Auto Skill E", Var = "AutoSkillE", Key = Enum.KeyCode.E},
+    {Name = "Auto Skill R", Var = "AutoSkillR", Key = Enum.KeyCode.R},
+    {Name = "Auto Skill T", Var = "AutoSkillT", Key = Enum.KeyCode.T},
+    {Name = "Auto Skill 1", Var = "AutoSkill1", Key = Enum.KeyCode.One},
+    {Name = "Auto Skill 2", Var = "AutoSkill2", Key = Enum.KeyCode.Two},
+    {Name = "Auto Skill 3", Var = "AutoSkill3", Key = Enum.KeyCode.Three}
+}
+
+for _, skill in ipairs(skillToggles) do
+    Window:CreateToggle(FarmTab, {
+        Name = skill.Name,
+        Default = false,
+        Callback = function(value)
+            if skill.Var == "AutoSkillE" then AutoSkillE = value
+            elseif skill.Var == "AutoSkillR" then AutoSkillR = value
+            elseif skill.Var == "AutoSkillT" then AutoSkillT = value
+            elseif skill.Var == "AutoSkill1" then AutoSkill1 = value
+            elseif skill.Var == "AutoSkill2" then AutoSkill2 = value
+            elseif skill.Var == "AutoSkill3" then AutoSkill3 = value end
+            
+            if value then
+                if not SkillSpamConnection then
+                    StartAutoSkills()
+                end
+            else
+                if not AutoSkillE and not AutoSkillR and not AutoSkillT and 
+                   not AutoSkill1 and not AutoSkill2 and not AutoSkill3 then
+                    StopAutoSkills()
+                end
+            end
+        end
+    })
+end
+
+Window:CreateToggle(FarmTab, {
+    Name = "Show Distance in Console",
+    Default = true,
+    Callback = function(value)
+        ShowDistance = value
+    end
+})
+
+Window:CreateToggle(FarmTab, {
+    Name = "Show XYZ Coordinates",
+    Default = false,
+    Callback = function(value)
+        ShowCoordinates = value
+    end
+})
+
+-- Movement Tab
+Window:CreateSlider(MovementTab, {
+    Name = "WalkSpeed",
+    Default = 16,
+    Min = 16,
+    Max = 200,
+    Callback = function(value)
+        WalkSpeed = value
+        ApplyWalkSpeed()
+    end
+})
+
+Window:CreateSlider(MovementTab, {
+    Name = "JumpPower",
+    Default = 50,
+    Min = 50,
+    Max = 200,
+    Callback = function(value)
+        JumpPower = value
+        ApplyJumpPower()
+    end
+})
+
+Window:CreateToggle(MovementTab, {
+    Name = "Fly (Press X)",
+    Default = false,
+    Callback = function(value)
+        FlyEnabled = value
+        if value then
+            EnableFly()
+        else
+            if FlyConnection then
+                FlyConnection:Disconnect()
+                FlyConnection = nil
+            end
+        end
+    end
+})
+
+Window:CreateSlider(MovementTab, {
+    Name = "Fly Speed",
+    Default = 50,
+    Min = 10,
+    Max = 150,
+    Callback = function(value)
+        FlySpeed = value
+    end
+})
+
+Window:CreateToggle(MovementTab, {
+    Name = "NoClip (Press V)",
+    Default = false,
+    Callback = function(value)
+        NoclipEnabled = value
+        if value then
+            EnableNoclip()
+        else
+            if NoclipConnection then
+                NoclipConnection:Disconnect()
+                NoclipConnection = nil
+            end
+        end
+    end
+})
+
+Window:CreateToggle(MovementTab, {
+    Name = "Click to TP (Hold LeftControl + Click)",
+    Default = false,
+    Callback = function(value)
+        ClickToTPEnabled = value
+        if value then
+            SetupClickToTP()
+        else
+            if ClickToTPConnection then
+                ClickToTPConnection:Disconnect()
+                ClickToTPConnection = nil
+            end
+        end
+    end
+})
+
+Window:CreateButton(MovementTab, {
+    Name = "Apply Movement Settings",
+    Callback = function()
+        ApplyWalkSpeed()
+        ApplyJumpPower()
+        print("Movement settings applied!")
+    end
+})
+
+-- Visual Tab
+Window:CreateToggle(VisualTab, {
+    Name = "Mob ESP",
+    Default = false,
+    Callback = function(value)
+        MobESPEnabled = value
+        if value then
+            UpdateESP()
+        else
+            ClearESP()
+        end
+    end
+})
+
+Window:CreateToggle(VisualTab, {
+    Name = "Show Distance on ESP",
+    Default = true,
+    Callback = function(value)
+        ShowDistance = value
+    end
+})
+
+-- Defence Tab
+Window:CreateToggle(DefenceTab, {
+    Name = "No Damage (God Mode)",
+    Default = false,
+    Callback = function(value)
+        NoDamageEnabled = value
+        if value then
+            EnableNoDamage()
+            print("No Damage Enabled - God Mode Active!")
+        else
+            DisableNoDamage()
+            print("No Damage Disabled")
+        end
+    end
+})
+
+Window:CreateToggle(DefenceTab, {
+    Name = "Anti-Die (Respawn at Death Location)",
+    Default = false,
+    Callback = function(value)
+        AntiDieEnabled = value
+        if value then
+            EnableAntiDie()
+            print("Anti-Die Enabled")
+        else
+            DisableAntiDie()
+            print("Anti-Die Disabled")
+        end
+    end
+})
+
+-- Anti-Cheat Tab
+Window:CreateToggle(AntiCheatTab, {
+    Name = "Auto Macro Solver",
+    Default = true,
+    Callback = function(value)
+        MacroSolverEnabled = value
+        if value then
+            StartMacroSolverLoop()
+            print("Auto Macro Solver: Enabled")
+        else
+            StopMacroSolverLoop()
+            print("Auto Macro Solver: Disabled")
+        end
+    end
+})
+
+Window:CreateToggle(AntiCheatTab, {
+    Name = "Block Server Messages",
+    Default = true,
+    Callback = function(value)
+        BlockServerMessages = value
+        if value then
+            SetupServerMessageBlock()
+            print("ServerMessage Blocker: Enabled")
+        else
+            RemoveServerMessageBlock()
+            print("ServerMessage Blocker: Disabled")
+        end
+    end
+})
+
+Window:CreateToggle(AntiCheatTab, {
+    Name = "Enable Anti-Ban System",
+    Default = false,
+    Callback = function(value)
+        AntiBanEnabled = value
+        if value then
+            EnableAntiBan()
+            print("Anti-Ban: Enabled")
+        else
+            DisableAntiBan()
+            print("Anti-Ban: Disabled")
+        end
+    end
+})
+
+Window:CreateToggle(AntiCheatTab, {
+    Name = "Randomize Actions (Avoid Detection)",
+    Default = false,
+    Callback = function(value)
+        RandomizeActions = value
+        print(value and "Action Randomization: Enabled" or "Action Randomization: Disabled")
+    end
+})
+
+Window:CreateButton(AntiCheatTab, {
+    Name = "Test Macro Solver",
+    Callback = function()
+        print("Testing Macro Solver...")
+        SolveMacro()
+    end
+})
+
+Window:CreateButton(AntiCheatTab, {
+    Name = "Delete All Macros",
+    Callback = function()
+        NuclearMacroEliminator()
+        print("Nuclear Macro Eliminator Activated!")
+    end
+})
+
+-- Performance Tab
+Window:CreateToggle(PerformanceTab, {
+    Name = "Performance Mode (Reduces Lag)",
+    Default = true,
+    Callback = function(value)
+        PerformanceMode = value
+        OptimizePerformance()
+        print(value and "Performance Mode: Enabled" or "Performance Mode: Disabled")
+    end
+})
+
+Window:CreateSlider(PerformanceTab, {
+    Name = "Action Delay (Seconds)",
+    Default = 0.1,
+    Min = 0.05,
+    Max = 0.5,
+    Callback = function(value)
+        ActionDelay = value
+        print("Action Delay: " .. value .. "s")
+    end
+})
+
+Window:CreateButton(PerformanceTab, {
+    Name = "Clear ESP Cache",
+    Callback = function()
+        ClearESP()
+        print("ESP Cache Cleared")
+    end
+})
+
+Window:CreateButton(PerformanceTab, {
+    Name = "Garbage Collect",
+    Callback = function()
+        collectgarbage("collect")
+        print("Memory Cleaned")
+    end
+})
+
+-- ======== KEYBINDS ========
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    
+    if input.KeyCode == Enum.KeyCode.X then
+        FlyEnabled = not FlyEnabled
+        if FlyEnabled then
+            EnableFly()
+            print("Fly: Enabled")
+        else
+            if FlyConnection then
+                FlyConnection:Disconnect()
+                FlyConnection = nil
+            end
+            print("Fly: Disabled")
+        end
+    end
+    
+    if input.KeyCode == Enum.KeyCode.V then
+        NoclipEnabled = not NoclipEnabled
+        if NoclipEnabled then
+            EnableNoclip()
+            print("NoClip: Enabled")
+        else
+            if NoclipConnection then
+                NoclipConnection:Disconnect()
+                NoclipConnection = nil
+            end
+            print("NoClip: Disabled")
+        end
+    end
+end)
+
+-- ======== INITIALIZATION ========
+task.wait(2)
+
+-- Apply initial movement settings
+LocalPlayer.CharacterAdded:Connect(function()
+    task.wait(1)
+    ApplyWalkSpeed()
+    ApplyJumpPower()
+    
+    -- Re-enable features if they were active
+    if FlyEnabled then EnableFly() end
+    if NoclipEnabled then EnableNoclip() end
+    if ClickToTPEnabled then SetupClickToTP() end
+    if NoDamageEnabled then EnableNoDamage() end
+    if AntiDieEnabled then EnableAntiDie() end
+    if MacroSolverEnabled then StartMacroSolverLoop() end
+    if AutoSkillE or AutoSkillR or AutoSkillT or AutoSkill1 or AutoSkill2 or AutoSkill3 then
+        StartAutoSkills()
+    end
+    if MobESPEnabled then UpdateESP() end
+end)
+
+if LocalPlayer.Character then
+    task.wait(1)
+    ApplyWalkSpeed()
+    ApplyJumpPower()
+end
+
+-- Initialize mobs
+ScanForMobs()
+
+-- Setup anti-cheat
+SetupServerMessageBlock()
+
+-- Start macro solver loop
+task.wait(1)
+StartMacroSolverLoop()
+
+-- Apply performance settings
+OptimizePerformance()
+
+print("========================================")
+print("Greatness Hub | Untitled RPG - COMPLETELY LOADED!")
+print("✅ ALL 36 Mob Toggles (World 1 & 2)")
+print("✅ Farm Distance Adjusting (1-20)")
+print("✅ Movement Tab with Fly, NoClip, WalkSpeed, JumpPower")
+print("✅ Click to TP (Hold LeftControl + Click)")
+print("✅ TP to Mobs Button")
+print("✅ Original Auto-Macro System")
+print("✅ Nuclear Macro Eliminator")
+print("✅ Anti-Die System")
+print("✅ No Damage System")
+print("✅ Skill Spam E, R, T, 1, 2, 3")
+print("✅ Distance Display with XYZ coordinates")
+print("✅ Anti-Ban System")
+print("✅ Performance Mode")
+print("✅ Optimized ESP")
+print("========================================")
+print("📌 Quick Start:")
+print("1. Select mobs to farm from the list")
+print("2. Adjust farm distance with slider")
+print("3. Enable Auto-Macro solver")
+print("4. Use Movement features: X for Fly, V for NoClip")
+print("5. Hold LeftControl + Click to teleport")
+print("========================================")
+
+-- ESP Update loop
+local espUpdateCount = 0
+RunService.RenderStepped:Connect(function()
+    espUpdateCount = espUpdateCount + 1
+    
+    if MobESPEnabled and (espUpdateCount % (PerformanceMode and 3 or 2) == 0) then
+        for mob, esp in pairs(MobESPObjects) do
+            UpdateESPVisual(mob)
+        end
+    end
+end)
+
+-- Farm update loop
+local farmUpdateCount = 0
+RunService.Heartbeat:Connect(function()
+    farmUpdateCount = farmUpdateCount + 1
+    
+    if farmUpdateCount % 60 == 0 then -- Update mob list every 60 frames
+        ScanForMobs()
+        if MobESPEnabled then
+            UpdateESP()
+        end
+    end
+end)
+
+-- Cleanup on exit
+game:GetService("Players").LocalPlayer.CharacterRemoving:Connect(function()
+    StopAutoFarm()
+    StopAutoSkills()
+    ClearESP()
+end)
+
+print("✅ Script ready! Select mobs to farm and enable features!")
