@@ -301,10 +301,8 @@ local LastMacroTime = 0
 local MacroSolverEnabled = true
 local MacroLoopConnection = nil
 local RunService = game:GetService("RunService")
-local VirtualInputManager = game:GetService("VirtualInputManager")
 local LocalPlayer = game.Players.LocalPlayer
 
--- ช่วย count keys
 local function countKeys(t)
     local count = 0
     for _ in pairs(t) do count = count + 1 end
@@ -313,119 +311,115 @@ end
 
 local function FindMacroGUI()
     local playerGui = LocalPlayer:WaitForChild("PlayerGui")
-    print("[Macro Debug] เริ่ม scan PlayerGui ทั้งหมด... จำนวน ScreenGui: " .. #playerGui:GetChildren())
     
     for _, screenGui in pairs(playerGui:GetChildren()) do
-        if screenGui:IsA("ScreenGui") and screenGui.Enabled then
-            print("[Macro Debug] พบ ScreenGui: " .. screenGui.Name .. " | Enabled: true")
+        if screenGui:IsA("ScreenGui") and screenGui.Enabled and screenGui.Name == "MacroGui" then  -- ตรงชื่อจาก log
+            print("[Macro Debug] พบ MacroGui: " .. screenGui.Name)
             
-            local potentialTextBox = nil
-            local hasMechaText = false
+            local codeLabel = nil
+            local triggerElement = nil  -- placeholder สีเทาที่ต้องคลิกเปิด keypad
             
             for _, obj in pairs(screenGui:GetDescendants()) do
                 if obj:IsA("TextLabel") then
-                    local txt = obj.Text:lower()
-                    if txt:find("mecha") or txt:find("prevention") or txt:find("입력") or txt:find("숫자") or txt:find("다음") or txt:find("퇴장") or txt:find("강제") then
-                        hasMechaText = true
-                        print("[Macro Debug] พบ TextLabel ที่ match pattern: " .. obj.Text .. " | Path: " .. obj:GetFullName())
+                    local txt = obj.Text
+                    if txt:find("다음 숫자를 입력해주세요") or txt:find("숫자") then
+                        codeLabel = obj
+                        print("[Macro Debug] พบ code label: " .. txt .. " | Path: " .. obj:GetFullName())
                     end
-                end
-                
-                if obj:IsA("TextBox") and obj.Visible then
-                    potentialTextBox = obj
-                    print("[Macro Debug] พบ TextBox ที่ Visible: " .. obj:GetFullName() .. " | Placeholder: " .. (obj.PlaceholderText or "ไม่มี"))
+                    
+                    -- หา placeholder สีเทา (มักเป็น TextLabel หรือ Frame ที่มี Text ว่าง/คำอธิบาย)
+                    if (obj:IsA("TextLabel") or obj:IsA("Frame")) and obj.Visible and 
+                       (txt:lower():find("입력") or txt == "" or obj.BackgroundColor3 and obj.BackgroundTransparency < 0.5) then
+                        if obj.Parent and obj.Parent:IsA("Frame") then
+                            triggerElement = obj.Parent  -- มักคลิก parent Frame
+                        else
+                            triggerElement = obj
+                        end
+                        print("[Macro Debug] ผู้สมัคร trigger (placeholder): " .. (triggerElement:GetFullName() or "nil") .. " | Text: " .. (txt or "ไม่มี"))
+                    end
                 end
             end
             
-            if hasMechaText and potentialTextBox then
-                print("[Macro Debug] >>> พบ Macro GUI ที่สมบูรณ์: " .. screenGui.Name)
-                return screenGui, potentialTextBox
+            if codeLabel then
+                -- คืนค่าแม้ trigger อาจไม่เจอ (จะลองหาใหม่หลัง simulate)
+                return screenGui, triggerElement, codeLabel
             end
         end
     end
     
-    print("[Macro Debug] ไม่พบ Macro GUI / TextBox ใด ๆ ที่ match")
-    return nil, nil
+    print("[Macro Debug] ไม่พบ MacroGui หรือ code label")
+    return nil, nil, nil
+end
+
+local function ExtractCodeFromLabel(codeLabel)
+    if not codeLabel then return nil end
+    local txt = codeLabel.Text
+    local code = txt:match("다음 숫자를 입력해주세요:%s*(%d+)") or txt:match("(%d%d%d%d+)")
+    if code and #code >= 4 and #code <= 6 then
+        print("[Macro Debug] Extract code: " .. code)
+        return code
+    end
+    return nil
 end
 
 local function FindKeypadButtons(macroGui)
     local keypad = {}
     for _, obj in pairs(macroGui:GetDescendants()) do
-        if obj:IsA("TextButton") and obj.Visible then
-            local digit = obj.Text:match("^%d$")
-            if digit then
-                keypad[digit] = obj
-                print("[Macro Debug] พบ keypad button: " .. digit .. " | " .. obj:GetFullName())
-            end
+        if obj:IsA("TextButton") and obj.Visible and obj.Text:match("^%d$") then
+            local digit = obj.Text
+            keypad[digit] = obj
+            print("[Macro Debug] Keypad digit: " .. digit .. " | " .. obj:GetFullName())
         end
     end
-    
-    local found = countKeys(keypad)
-    print("[Macro Debug] พบ keypad buttons ทั้งหมด: " .. found .. "/10")
-    if found == 10 then
-        return keypad
-    end
-    return nil
+    local cnt = countKeys(keypad)
+    print("[Macro Debug] พบ keypad: " .. cnt .. "/10")
+    return cnt == 10 and keypad or nil
 end
 
-local function ExtractCode(macroGui)
-    for _, obj in pairs(macroGui:GetDescendants()) do
-        if obj:IsA("TextLabel") then
-            local txt = obj.Text
-            -- ล้าง text ให้เหลือแต่ตัวเลข
-            txt = txt:gsub("[^%d]", "")  -- ลบทุกอย่างที่ไม่ใช่ตัวเลข
-            local code = txt:match("%d%d%d%d%d?%d?")  -- 4-6 หลัก
-            if code and #code >= 4 and #code <= 6 then
-                print("[Macro Debug] ดึง code สำเร็จ: " .. code .. " จาก TextLabel: " .. obj:GetFullName())
-                return code
-            end
-        end
-    end
-    print("[Macro Debug] ไม่พบ code ตัวเลข 4-6 หลักใน TextLabel")
-    return nil
-end
-
-local function TypeCodeSafely(macroGui, textBox, code)
+local function TypeCodeSafely(macroGui, triggerElement, code)
     if not code then return end
     
-    print("[Macro Debug] กำลัง simulate คลิก TextBox เพื่อเปิด keypad | Code: " .. code)
-    
-    pcall(function()
-        textBox:CaptureFocus()
-        task.wait(0.05)
-        textBox:Fire("MouseButton1Click")  -- หรือ textBox.Activated:Fire() ถ้าใช้
-    end)
-    task.wait(0.3)  -- รอ GUI โหลด keypad (เพิ่มได้ถ้าช้า)
-    
-    local keypad = FindKeypadButtons(macroGui)
-    if not keypad then
-        print("[Macro Debug] ไม่พบ keypad หลังคลิก TextBox")
-        return
+    -- Step 1: Simulate คลิก trigger เพื่อเปิด keypad
+    if triggerElement then
+        pcall(function()
+            triggerElement:Fire("MouseButton1Click")
+            print("[Macro Debug] คลิก trigger: " .. triggerElement:GetFullName())
+        end)
+    else
+        -- ถ้าไม่เจอ trigger ลองคลิก codeLabel หรือ parent Frame
+        if macroGui:FindFirstChild("Frame", true) then
+            local fallback = macroGui:FindFirstChild("Frame", true)
+            pcall(function() fallback:Fire("MouseButton1Click") end)
+            print("[Macro Debug] Fallback คลิก Frame แรกใน MacroGui")
+        end
     end
+    task.wait(0.45)  -- รอ keypad โหลด (เพิ่มจาก 0.3 เป็น 0.45 เพราะบางเกมช้า)
     
+    -- Step 2: หา keypad หลังเปิด
+    local keypad = FindKeypadButtons(macroGui)
+    if not keypad then return end
+    
+    -- Step 3: กดตัวเลขตาม code
     for i = 1, #code do
-        local digit = code:sub(i,i)
+        local digit = code:sub(i, i)
         local btn = keypad[digit]
         if btn then
             pcall(function() btn:Fire("MouseButton1Click") end)
             print("[Macro Debug] กด digit: " .. digit)
-            task.wait(0.12 + math.random()*0.08)  -- human-like delay
+            task.wait(0.14 + math.random() * 0.1)
         else
-            warn("[Macro Debug] ไม่มีปุ่มสำหรับ " .. digit)
+            warn("[Macro Debug] ไม่มีปุ่มสำหรับ digit " .. digit)
             return
         end
     end
     
-    -- ลองกด reset หรือ submit ถ้ามี
-    task.wait(0.4)
+    -- Step 4: ลองกด "입력 초기화" ถ้าจำเป็น (แต่ปกติ auto submit)
+    task.wait(0.6)
     for _, btn in pairs(macroGui:GetDescendants()) do
-        if btn:IsA("TextButton") then
-            local t = btn.Text:lower()
-            if t:find("초기화") or t:find("확인") or t:find("제출") or t:find("x") or t:find("닫기") then
-                pcall(function() btn:Fire("MouseButton1Click") end)
-                print("[Macro Debug] กดปุ่ม: " .. btn.Text)
-                break
-            end
+        if btn:IsA("TextButton") and (btn.Text:find("초기화") or btn.Text:find("X") or btn.Text:find("닫기")) then
+            pcall(function() btn:Fire("MouseButton1Click") end)
+            print("[Macro Debug] กด " .. btn.Text .. " เพื่อ close/reset")
+            break
         end
     end
 end
@@ -435,15 +429,15 @@ local function SolveMacro()
     IsSolvingMacro = true
     LastMacroTime = tick()
     
-    local macroGui, textBox = FindMacroGUI()
-    if not macroGui or not textBox then
+    local macroGui, trigger, codeLabel = FindMacroGUI()
+    if not macroGui or not codeLabel then
         IsSolvingMacro = false
         return
     end
     
-    local code = ExtractCode(macroGui)
+    local code = ExtractCodeFromLabel(codeLabel)
     if code then
-        TypeCodeSafely(macroGui, textBox, code)
+        TypeCodeSafely(macroGui, trigger, code)
     end
     
     IsSolvingMacro = false
@@ -460,7 +454,7 @@ local function StartMacroSolverLoop()
             end
         end
     end)
-    print("[Macro Debug] Macro Solver Loop เริ่มทำงานแล้ว")
+    print("[Macro Debug] Auto-solver loop เริ่มทำงาน (MacroGui mode)")
 end
 
 local function StopMacroSolverLoop()
@@ -470,7 +464,7 @@ local function StopMacroSolverLoop()
     end
 end
 
--- เปิดใช้งาน
+-- เริ่ม loop
 if MacroSolverEnabled then
     StartMacroSolverLoop()
 end
@@ -1651,5 +1645,6 @@ game:GetService("Players").LocalPlayer.CharacterRemoving:Connect(function()
 end)
 
 print("✅ Script ready! Select mobs to farm and enable features!")
+
 
 
