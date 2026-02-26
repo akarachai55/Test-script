@@ -1,0 +1,140 @@
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
+
+local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/xHeptc/Kavo-UI-Library/main/source.lua"))()
+local Window = Library.CreateLib("Captcha Solver v2.0", "DarkTheme")
+
+local Tab = Window:NewTab("Solver")
+local Section = Tab:NewSection("Mecha Prevention")
+
+local Enabled = false
+local IsSolving = false
+local LastSolveTime = 0
+local Connection = nil
+
+local function debug(msg)
+    print("[Solver] " .. msg)
+end
+
+local function FindMacroGui()
+    local pg = LocalPlayer:WaitForChild("PlayerGui")
+    for _, sg in pairs(pg:GetChildren()) do
+        if sg:IsA("ScreenGui") and sg.Name == "MacroGui" and sg.Enabled then
+            debug("MacroGui found")
+            local codeLabel = nil
+            local trigger = nil
+            for _, obj in pairs(sg:GetDescendants()) do
+                if obj:IsA("TextLabel") and obj.Text:find("다음") then
+                    codeLabel = obj
+                    debug("Code label found")
+                end
+                if obj:IsA("Frame") and obj.Name:find("Input") or obj.BackgroundTransparency < 0.8 then
+                    trigger = obj
+                end
+            end
+            return sg, trigger, codeLabel
+        end
+    end
+    return nil, nil, nil
+end
+
+local function GetCode(label)
+    local text = label.Text
+    local code = text:match("%d%d%d%d%d?%d?")
+    if code and #code >= 4 then
+        debug("Code: " .. code)
+        return code
+    end
+    return nil
+end
+
+local function GetKeypad(gui)
+    local keypad = {}
+    local frame = gui:FindFirstChild("Frame")
+    if frame then
+        local kif = frame:FindFirstChild("KeyInputFrame")
+        if kif then
+            for _, obj in pairs(kif:GetChildren()) do
+                if obj:IsA("TextButton") and obj.Text:match("^%d$") then
+                    keypad[obj.Text] = obj
+                end
+            end
+        end
+    end
+    local count = 0
+    for _ in pairs(keypad) do count = count + 1 end
+    debug("Keypad: " .. count .. "/10")
+    return count == 10 and keypad
+end
+
+local function SolveCaptcha()
+    if IsSolving or tick() - LastSolveTime < 2 then return end
+    IsSolving = true
+    LastSolveTime = tick()
+    
+    local gui, trigger, label = FindMacroGui()
+    if not gui or not label then
+        IsSolving = false
+        return
+    end
+    
+    local code = GetCode(label)
+    if not code then
+        IsSolving = false
+        return
+    end
+    
+    debug("Solving: " .. code)
+    
+    -- Reset
+    for _, b in pairs(gui:GetDescendants()) do
+        if b:IsA("TextButton") and b.Text:find("초기화") then
+            b:Fire("MouseButton1Click")
+            task.wait(0.5)
+        end
+    end
+    
+    -- Trigger
+    if trigger then
+        trigger:Fire("MouseButton1Click")
+        task.wait(0.5)
+    end
+    
+    local keypad = GetKeypad(gui)
+    if keypad then
+        for i = 1, #code do
+            local d = code:sub(i,i)
+            local btn = keypad[d]
+            if btn then
+                btn:Fire("MouseButton1Click")
+                debug("Pressed " .. d)
+                task.wait(0.5)
+            end
+        end
+    end
+    
+    task.wait(2)
+    IsSolving = false
+end
+
+local function StartLoop()
+    Connection = RunService.Heartbeat:Connect(function()
+        if Enabled and not IsSolving then
+            SolveCaptcha()
+        end
+    end)
+end
+
+local function StopLoop()
+    if Connection then Connection:Disconnect() Connection = nil end
+end
+
+Section:NewToggle("Enable Solver", "Auto solve captcha", function(v)
+    Enabled = v
+    if v then StartLoop() else StopLoop() end
+end)
+
+Section:NewButton("Test Solve", "Manual solve", SolveCaptcha)
+
+print("Solver ready - RightControl for UI")
