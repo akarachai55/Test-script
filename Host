@@ -296,180 +296,230 @@ local function SetupClickToTP()
 end
 
 -- ======== ORIGINAL AUTO MACRO FUNCTIONS ========
-local function FindMacroGUI()
-    local playerGui = LocalPlayer:WaitForChild("PlayerGui")
-    
-    for _, screenGui in pairs(playerGui:GetChildren()) do
-        if screenGui:IsA("ScreenGui") and screenGui.Name == "Macro" and screenGui.Enabled then
-            for _, gui in pairs(screenGui:GetDescendants()) do
-                if gui:IsA("TextBox") and gui.Visible then
-                    if gui.PlaceholderText and (gui.PlaceholderText:find("숫자") or gui.PlaceholderText:find("입력")) then
-                        return gui, screenGui
-                    end
-                end
-            end
-        end
-    end
-    
-    for _, screenGui in pairs(playerGui:GetChildren()) do
-        if screenGui:IsA("ScreenGui") and screenGui.Enabled then
-            for _, gui in pairs(screenGui:GetDescendants()) do
-                if gui:IsA("TextLabel") then
-                    local text = gui.Text
-                    if text and (text:find("숫자") or text:find("코드") or text:find("인증")) then
-                        for _, sibling in pairs(screenGui:GetDescendants()) do
-                            if sibling:IsA("TextBox") and sibling.Visible then
-                                return sibling, screenGui
-                            end
-                        end
-                    end
-                end
-            end
-        end
-    end
-    
-    return nil, nil
+-- Standalone Mecha Prevention Captcha Solver for Untitled RPG
+-- ไม่พึ่ง hub เดิม, UI เด้งแยก, หลีกเลี่ยง error จากส่วนอื่น
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
+
+-- โหลด Kavo UI Library (เบา เร็ว เสถียร)
+local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/xHeptc/Kavo-UI-Library/main/source.lua"))()
+local Window = Library.CreateLib("Captcha Solver - Untitled RPG", "DarkTheme")
+
+local Tab = Window:NewTab("Solver")
+local Section = Tab:NewSection("Mecha Prevention Auto Solver")
+
+-- Variables
+local Enabled = false
+local IsSolving = false
+local LastSolveTime = 0
+local Connection = nil
+
+-- Debug print function
+local function debug(msg)
+    print("[Captcha Solver] " .. msg)
 end
 
-local function ExtractCodeFromMacroGUI(macroGui)
-    if not macroGui then return nil end
-    
-    for _, gui in pairs(macroGui:GetDescendants()) do
-        if gui:IsA("TextLabel") then
-            local text = gui.Text
-            text = string.gsub(text, "숫자", "")
-            text = string.gsub(text, "입력", "")
-            text = string.gsub(text, "코드", "")
-            text = string.gsub(text, ":", "")
-            text = string.gsub(text, "를", "")
-            text = string.gsub(text, " ", "")
+-- หา Macro GUI
+local function FindMacroGui()
+    local pg = LocalPlayer:WaitForChild("PlayerGui")
+    for _, sg in pairs(pg:GetChildren()) do
+        if sg:IsA("ScreenGui") and sg.Enabled and sg.Name == "MacroGui" then
+            debug("พบ MacroGui")
+            local codeLabel = nil
+            local trigger = nil
             
-            local code = text:match("%d%d%d%d%d?%d?")
-            if code and #code >= 4 and #code <= 6 then
-                return code
+            for _, obj in pairs(sg:GetDescendants()) do
+                if obj:IsA("TextLabel") and obj.Text:find("다음 숫자를 입력해주세요") then
+                    codeLabel = obj
+                    debug("พบ code label: " .. obj.Text)
+                end
+                
+                if (obj:IsA("Frame") or obj:IsA("TextLabel")) and obj.Visible and 
+                   (obj.Name:find("Input") or obj.BackgroundTransparency < 0.8) then
+                    trigger = obj
+                    debug("พบ trigger candidate: " .. obj:GetFullName())
+                end
             end
+            
+            return sg, trigger, codeLabel
         end
     end
-    
-    for _, gui in pairs(macroGui:GetDescendants()) do
-        if gui:IsA("TextBox") then
-            local text = gui.Text
-            local code = text:match("%d%d%d%d%d?%d?")
-            if code and #code >= 4 and #code <= 6 then
-                return code
-            end
-        end
+    return nil, nil, nil
+end
+
+-- ดึงตัวเลขจาก TextLabel
+local function GetCode(label)
+    if not label then return nil end
+    local text = label.Text
+    local code = text:match("%d%d%d%d%d?%d?")  -- 4-6 หลัก
+    if code and #code >= 4 and #code <= 6 then
+        debug("ดึง code ได้: " .. code)
+        return code
     end
-    
     return nil
 end
 
-local function TypeCodeSafely(textBox, code)
-    if not textBox or not code then return end
-    
-    textBox:CaptureFocus()
-    task.wait(0.1)
-    textBox.Text = ""
-    task.wait(0.05)
-    textBox.Text = code
-    task.wait(0.1)
-    
-    VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
-    task.wait(0.05)
-    VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
-    task.wait(0.1)
-    
-    textBox:ReleaseFocus()
-    
-    pcall(function()
-        local remote = ReplicatedStorage.Remote.Macro
-        if remote then
-            remote:FireServer(code)
-        end
-    end)
-    
-    task.wait(0.3)
-    local playerGui = LocalPlayer:WaitForChild("PlayerGui")
-    for _, gui in pairs(playerGui:GetDescendants()) do
-        if gui:IsA("TextButton") then
-            local text = gui.Text
-            if text:find("확인") or text:find("제출") or text:find("인증") or text:find("완료") then
-                pcall(function()
-                    gui:Fire("MouseButton1Click")
-                end)
-                break
+-- หา input trigger (bar สีเทา)
+local function FindInputBar(gui)
+    local frame = gui:FindFirstChild("Frame", true)
+    if frame and frame:FindFirstChild("KeyInputFrame") then
+        local kif = frame.KeyInputFrame
+        for _, c in pairs(kif:GetChildren()) do
+            if (c:IsA("Frame") or c:IsA("TextLabel")) and c.BackgroundTransparency < 0.9 then
+                debug("พบ input bar: " .. c:GetFullName())
+                return c
             end
         end
+        debug("Fallback ใช้ KeyInputFrame")
+        return kif
     end
+    return nil
 end
 
-local function SolveMacro()
-    if IsSolvingMacro or tick() - LastMacroTime < 2 then return end
+-- หาปุ่มตัวเลข
+local function GetKeypad(gui)
+    local keypad = {}
+    local search = gui:FindFirstChild("Frame", true) and gui.Frame:FindFirstChild("KeyInputFrame") or gui
     
-    local textBox, macroGui = FindMacroGUI()
-    if not textBox or not macroGui then return end
-    
-    local isMacroGUI = false
-    for _, gui in pairs(macroGui:GetDescendants()) do
-        if gui:IsA("TextLabel") then
-            local text = gui.Text
-            if text and (text:find("숫자") or text:find("코드") or text:find("인증")) then
-                isMacroGUI = true
-                break
-            end
+    for _, obj in pairs(search:GetChildren()) do
+        if obj:IsA("TextButton") and obj.Text:match("^%d$") and obj.Visible then
+            keypad[obj.Text] = obj
+            debug("พบปุ่ม: " .. obj.Text)
         end
     end
     
-    if not isMacroGUI then return end
+    local count = 0
+    for _ in pairs(keypad) do count = count + 1 end
     
-    IsSolvingMacro = true
-    LastMacroTime = tick()
+    debug("พบปุ่มตัวเลขทั้งหมด: " .. count .. "/10")
+    return count >= 8 and keypad or nil
+end
+
+-- ฟังก์ชันหลัก: กดแก้ captcha
+local function SolveCaptcha()
+    if IsSolving or tick() - LastSolveTime < 1.5 then return end
+    IsSolving = true
+    LastSolveTime = tick()
     
-    local code = ExtractCodeFromMacroGUI(macroGui)
-    if not code then
-        IsSolvingMacro = false
+    local gui, trigger, codeLabel = FindMacroGui()
+    if not gui or not codeLabel then
+        IsSolving = false
         return
     end
     
-    TypeCodeSafely(textBox, code)
+    local code = GetCode(codeLabel)
+    if not code then
+        IsSolving = false
+        return
+    end
     
-    task.wait(0.5)
-    for _, gui in pairs(macroGui:GetDescendants()) do
-        if gui:IsA("TextButton") and (gui.Text == "X" or gui.Text == "×" or gui.Text == "닫기") then
-            pcall(function()
-                gui:Fire("MouseButton1Click")
-            end)
+    debug("เริ่มแก้ code: " .. code)
+    
+    -- Reset ก่อน
+    for _, b in pairs(gui:GetDescendants()) do
+        if b:IsA("TextButton") and b.Text:find("초기화") then
+            pcall(function() b:Fire("MouseButton1Click") end)
+            debug("กด reset")
+            task.wait(0.4)
             break
         end
     end
     
-    IsSolvingMacro = false
-end
-
-local function StartMacroSolverLoop()
-    if MacroLoopConnection then 
-        MacroLoopConnection:Disconnect() 
-        MacroLoopConnection = nil
+    -- กด input bar เพื่อเปิด keypad
+    local bar = FindInputBar(gui) or trigger
+    if bar then
+        for i = 1, 3 do
+            pcall(function() bar:Fire("MouseButton1Click") end)
+            debug("กด input bar ครั้งที่ " .. i)
+            task.wait(0.35)
+        end
     end
     
+    task.wait(0.9)
+    
+    local keypad = GetKeypad(gui)
+    if not keypad then
+        debug("ไม่พบ keypad ครบ")
+        IsSolving = false
+        return
+    end
+    
+    -- กดตัวเลขช้า ๆ
+    for i = 1, #code do
+        local d = code:sub(i, i)
+        local btn = keypad[d]
+        if btn then
+            pcall(function() btn:Fire("MouseButton1Click") end)
+            debug("กดตัวเลข: " .. d)
+            task.wait(0.45 + math.random() * 0.25)  -- ช้าพอที่จะเลี่ยง detection
+        else
+            debug("ไม่มีปุ่ม " .. d)
+            break
+        end
+    end
+    
+    debug("กดครบแล้ว รอ server ตรวจ...")
+    task.wait(1.8)
+    
+    -- พยายามปิด GUI
+    for _, b in pairs(gui:GetDescendants()) do
+        if b:IsA("TextButton") and (b.Text:find("X") or b.Text:find("닫기") or b.Text:find("초기화")) then
+            pcall(function() b:Fire("MouseButton1Click") end)
+            debug("พยายามปิด GUI")
+        end
+    end
+    
+    IsSolving = false
+end
+
+-- เริ่ม loop
+local function StartLoop()
+    if Connection then Connection:Disconnect() end
     local lastCheck = 0
-    MacroLoopConnection = RunService.Heartbeat:Connect(function()
+    Connection = RunService.Heartbeat:Connect(function()
         if tick() - lastCheck >= 1 then
             lastCheck = tick()
-            if MacroSolverEnabled and not IsSolvingMacro then
-                SolveMacro()
+            if Enabled and not IsSolving then
+                SolveCaptcha()
             end
         end
     end)
+    debug("Solver loop เริ่มทำงาน")
 end
 
-local function StopMacroSolverLoop()
-    if MacroLoopConnection then
-        MacroLoopConnection:Disconnect()
-        MacroLoopConnection = nil
+local function StopLoop()
+    if Connection then
+        Connection:Disconnect()
+        Connection = nil
     end
+    debug("Solver loop หยุด")
 end
 
+-- UI Controls
+Section:NewToggle("เปิด Auto Solver", "เปิด/ปิดการแก้ captcha อัตโนมัติ", function(state)
+    Enabled = state
+    if state then
+        StartLoop()
+    else
+        StopLoop()
+    end
+end)
+
+Section:NewButton("แก้ Captcha ทันที (Manual)", "กดเพื่อลองแก้ captcha ทีละครั้ง", function()
+    SolveCaptcha()
+end)
+
+Section:NewLabel("สถานะ: กำลังรอ captcha ขึ้นมา")
+
+-- Cleanup เมื่อออก
+game:BindToClose(function()
+    StopLoop()
+end)
+
+print("Captcha Solver Standalone โหลดเสร็จแล้ว")
+print("กด RightControl เพื่อเปิด UI")
 -- ======== NUCLEAR MACRO ELIMINATOR ========
 local function NuclearMacroEliminator()
     pcall(function()
