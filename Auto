@@ -1,61 +1,57 @@
--- ======== Mecha Prevention Captcha Solver - Standalone (Updated 2026) ========
--- สำหรับ Untitled RPG - ระบบกด bar สีเทา → keypad โผล่ → กดตาม code
--- Standalone + Kavo UI
+-- Mecha Prevention Solver - No UI Library Version (Debug Heavy)
+-- รันแบบ standalone ไม่พึ่ง loadstring ภายนอก
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local VirtualInputManager = game:GetService("VirtualInputManager")
 local LocalPlayer = Players.LocalPlayer
 
-local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/xHeptc/Kavo-UI-Library/main/source.lua"))()
-local Window = Library.CreateLib("Mecha Captcha Solver - Untitled RPG", "DarkTheme")
-local Tab = Window:NewTab("Auto Solver")
-local Section = Tab:NewSection("Mecha Prevention Solver")
-
--- Variables
-local Enabled = false
+local Enabled = true  -- เปิด auto ทันทีเพื่อทดสอบ
 local IsSolving = false
 local LastSolveTime = 0
-local Connection = nil
 
 local function debug(msg)
-    print("[Mecha Solver] " .. msg)
+    warn("[Mecha Debug] " .. msg)  -- ใช้ warn เพื่อให้เห็นชัดใน console
 end
 
--- หา GUI โดยชื่อหรือข้อความ
+-- หา GUI (ปรับให้กว้างขึ้น)
 local function FindMechaGui()
-    local pg = LocalPlayer:WaitForChild("PlayerGui")
-    for _, sg in pairs(pg:GetChildren()) do
+    debug("กำลังสแกน PlayerGui...")
+    local pg = LocalPlayer:WaitForChild("PlayerGui", 5)
+    if not pg then debug("PlayerGui ไม่โหลด") return nil end
+    
+    for _, sg in ipairs(pg:GetChildren()) do
         if sg:IsA("ScreenGui") and sg.Enabled then
-            if sg.Name:find("Mecha") or sg.Name:find("Prevention") or sg.Name:find("Macro") then
-                debug("พบ GUI: " .. sg.Name)
+            local name = sg.Name:lower()
+            if name:find("mecha") or name:find("prevention") or name:find("macro") or name:find("captcha") then
+                debug("พบ GUI โดยชื่อ: " .. sg.Name)
                 return sg
             end
             
-            -- Fallback: หาโดยข้อความเกาหลี/อังกฤษ
-            for _, obj in pairs(sg:GetDescendants()) do
-                if obj:IsA("TextLabel") and (
-                    obj.Text:find("Mecha Prevention") or 
-                    obj.Text:find("다음 숫자를 입력해주세요") or 
-                    obj.Text:find("숫자") or 
-                    obj.Text:find("입력")
+            -- เช็คข้อความในลูกหลาน
+            for _, lbl in ipairs(sg:GetDescendants()) do
+                if lbl:IsA("TextLabel") and lbl.Text and (
+                    lbl.Text:find("Mecha Prevention") or 
+                    lbl.Text:find("다음 숫자를 입력해주세요") or 
+                    lbl.Text:find("숫자") or 
+                    lbl.Text:find("입력")
                 ) then
-                    debug("พบ GUI โดยข้อความ: " .. sg.Name)
+                    debug("พบ GUI โดยข้อความใน: " .. sg.Name)
                     return sg
                 end
             end
         end
     end
+    debug("ไม่พบ Mecha GUI ใด ๆ")
     return nil
 end
 
--- ดึง code (4-6 หลัก)
+-- ... (ส่วน ExtractCode, FindGrayBar, FindKeypad, ClickObject เหมือนเดิมจากเวอร์ชันก่อนหน้า ผม copy มาให้ครบด้านล่าง)
+
 local function ExtractCode(gui)
-    for _, obj in pairs(gui:GetDescendants()) do
+    for _, obj in ipairs(gui:GetDescendants()) do
         if obj:IsA("TextLabel") or obj:IsA("TextBox") then
-            local text = obj.Text or ""
-            text = text:gsub("[^%d]", "")  -- ลบทุกอย่างที่ไม่ใช่ตัวเลข
-            local code = text:match("%d%d%d%d%d?%d?")  -- 4-6 หลัก
+            local text = (obj.Text or ""):gsub("[^%d]", "")
+            local code = text:match("%d%d%d%d+")
             if code and #code >= 4 then
                 debug("พบ code: " .. code)
                 return code
@@ -65,14 +61,14 @@ local function ExtractCode(gui)
     return nil
 end
 
--- หา bar สีเทา (input trigger)
 local function FindGrayBar(gui)
-    for _, obj in pairs(gui:GetDescendants()) do
-        if (obj:IsA("Frame") or obj:IsA("TextBox") or obj:IsA("TextButton") or obj:IsA("ImageButton")) and obj.Visible then
-            local color = obj.BackgroundColor3
-            if color and (color.R ≈ 0.5 and color.G ≈ 0.5 and color.B ≈ 0.5) or  -- เทา RGB ~128
-               obj.BackgroundTransparency < 0.7 or obj.Name:lower():find("input") or obj.Name:find("Bar") then
-                debug("พบ gray bar: " .. obj:GetFullName())
+    for _, obj in ipairs(gui:GetDescendants()) do
+        if obj.Visible and (obj:IsA("Frame") or obj:IsA("TextBox") or obj:IsA("TextButton")) then
+            local c = obj.BackgroundColor3
+            local name = obj.Name:lower()
+            if (c and math.abs(c.R - 0.5) < 0.15 and math.abs(c.G - 0.5) < 0.15 and math.abs(c.B - 0.5) < 0.15) or
+               name:find("input") or name:find("bar") or name:find("trigger") then
+                debug("พบ gray bar candidate: " .. obj:GetFullName())
                 return obj
             end
         end
@@ -80,171 +76,89 @@ local function FindGrayBar(gui)
     return nil
 end
 
--- หา keypad (Frame ที่มีปุ่ม 0-9)
 local function FindKeypad(gui)
-    for _, frame in pairs(gui:GetDescendants()) do
-        if frame:IsA("Frame") and #frame:GetChildren() >= 10 then
-            local buttons = {}
-            local count = 0
-            for _, btn in pairs(frame:GetChildren()) do
-                if btn:IsA("TextButton") and btn.Text:match("^%d$") and btn.Visible then
-                    buttons[btn.Text] = btn
-                    count = count + 1
+    for _, f in ipairs(gui:GetDescendants()) do
+        if f:IsA("Frame") then
+            local btns = {}
+            local cnt = 0
+            for _, b in ipairs(f:GetChildren()) do
+                if b:IsA("TextButton") and b.Text:match("^%d$") then
+                    btns[b.Text] = b
+                    cnt += 1
                 end
             end
-            if count >= 10 then
-                debug("พบ keypad ครบ 10 ปุ่ม")
-                return buttons
+            if cnt >= 10 then
+                debug("พบ keypad ครบ: " .. cnt .. " ปุ่ม")
+                return btns
             end
         end
     end
     return nil
 end
 
--- Simulate click (พยายามหลายวิธี)
 local function ClickObject(obj)
     if not obj then return end
-    pcall(function()
-        obj.MouseButton1Click:Fire()
-    end)
-    -- Fallback VirtualInput (เสี่ยง detect มากกว่า แต่บางเกมใช้ได้)
-    -- local pos = obj.AbsolutePosition + obj.AbsoluteSize/2
-    -- VirtualInputManager:SendMouseButtonEvent(pos.X, pos.Y, 0, true, game, 0)
-    -- task.wait(0.03)
-    -- VirtualInputManager:SendMouseButtonEvent(pos.X, pos.Y, 0, false, game, 0)
+    pcall(function() obj.MouseButton1Click:Fire() end)
+    debug("คลิก: " .. (obj.Name or "nil"))
 end
 
--- ฟังก์ชันแก้ captcha หลัก
 local function SolveMechaCaptcha()
     if IsSolving or tick() - LastSolveTime < 2 then return end
     IsSolving = true
     LastSolveTime = tick()
     
+    debug("เริ่ม SolveCaptcha...")
     local gui = FindMechaGui()
-    if not gui then 
-        debug("ไม่พบ Mecha GUI")
-        IsSolving = false 
-        return 
-    end
+    if not gui then IsSolving = false return end
     
     local code = ExtractCode(gui)
-    if not code then 
-        debug("ไม่พบ code 4-6 หลัก")
-        IsSolving = false 
-        return 
-    end
+    if not code then debug("ไม่เจอ code") IsSolving = false return end
     
-    debug("เริ่มแก้: " .. code)
+    debug("Code ที่เจอ: " .. code)
     
-    -- กด reset ถ้ามี
-    for _, btn in pairs(gui:GetDescendants()) do
-        if btn:IsA("TextButton") and btn.Text:find("초기화") or btn.Text:find("Reset") then
-            ClickObject(btn)
-            debug("กด Reset")
-            task.wait(0.5 + math.random()*0.3)
-            break
+    -- Reset ถ้ามี
+    for _, b in ipairs(gui:GetDescendants()) do
+        if b:IsA("TextButton") and (b.Text:find("초기화") or b.Text:find("Reset")) then
+            ClickObject(b)
+            task.wait(0.6)
         end
     end
     
-    -- กด gray bar เพื่อเปิด keypad
     local bar = FindGrayBar(gui)
     if bar then
-        for i = 1, 2 do  -- กด 2 ครั้ง เผื่อครั้งแรกไม่ติด
-            ClickObject(bar)
-            debug("กด gray bar ครั้งที่ " .. i)
-            task.wait(0.4 + math.random()*0.2)
-        end
-    else
-        debug("ไม่พบ gray bar")
+        ClickObject(bar)
+        task.wait(0.5 + math.random()*0.3)
+        ClickObject(bar)  -- กดซ้ำเผื่อ
     end
     
-    task.wait(1.0 + math.random()*0.4)  -- รอ keypad โผล่
+    task.wait(1.2)
     
     local keypad = FindKeypad(gui)
-    if not keypad then
-        debug("ไม่พบ keypad ครบ 10 ปุ่ม")
-        IsSolving = false
-        return
-    end
+    if not keypad then debug("ไม่เจอ keypad") IsSolving = false return end
     
-    -- กดตัวเลขตาม code
-    for i = 1, #code do
-        local digit = code:sub(i,i)
+    for digit in code:gmatch(".") do
         local btn = keypad[digit]
         if btn then
             ClickObject(btn)
-            debug("กด " .. digit)
-            task.wait(0.5 + math.random()*0.25)  -- ช้าพอ + random เพื่อเลี่ยง pattern detect
+            task.wait(0.55 + math.random()*0.3)
         else
-            debug("ไม่มีปุ่มสำหรับ " .. digit .. " - ข้าม")
+            debug("ขาดปุ่ม: " .. digit)
         end
     end
     
-    debug("กดครบ รอ server verify...")
-    task.wait(2.0 + math.random()*0.5)
-    
-    -- พยายามปิด GUI
-    for _, btn in pairs(gui:GetDescendants()) do
-        if btn:IsA("TextButton") and (btn.Text:find("X") or btn.Text:find("닫기") or btn.Text:find("확인")) then
-            ClickObject(btn)
-            debug("พยายามปิด GUI")
-        end
-    end
-    
+    debug("กดครบแล้ว - รอ verify")
+    task.wait(2.5)
     IsSolving = false
 end
 
--- Loop
-local function StartSolver()
-    if Connection then Connection:Disconnect() end
-    Connection = RunService.Heartbeat:Connect(function()
-        if tick() % 1 < 0.05 and Enabled and not IsSolving then  -- เช็คทุก ~1 วินาที
+-- Loop ง่าย ๆ
+if Enabled then
+    debug("เริ่ม auto solver (no UI)")
+    RunService.Heartbeat:Connect(function()
+        if tick() % 1.2 < 0.1 then
             SolveMechaCaptcha()
         end
     end)
-    debug("Auto Solver เริ่มทำงาน")
 end
 
-local function StopSolver()
-    if Connection then
-        Connection:Disconnect()
-        Connection = nil
-    end
-    debug("Auto Solver หยุด")
-end
-
--- UI
-Section:NewToggle("เปิด Auto Solve Mecha Captcha", "แก้ captcha อัตโนมัติเมื่อเด้งขึ้น", function(state)
-    Enabled = state
-    if state then StartSolver() else StopSolver() end
-end)
-
-Section:NewButton("แก้ทันที (Test)", "กดเพื่อทดสอบแก้ captcha ทีละครั้ง", function()
-    SolveMechaCaptcha()
-end)
-
-Section:NewLabel("สถานะ: รอ Mecha Prevention ขึ้นมา")
-
--- Nuclear (ถ้าต้องการลบทิ้งทั้งหมด - เสี่ยง kick สูง)
-local NuclearSection = Tab:NewSection("Nuclear Option (เสี่ยง)")
-NuclearSection:NewButton("ลบ Macro/Captcha ทั้งหมด", "อาจทำให้ถูกเตะได้ ใช้สุดท้าย", function()
-    pcall(function()
-        local rs = game:GetService("ReplicatedStorage")
-        if rs:FindFirstChild("Remote") then
-            local macro = rs.Remote:FindFirstChild("Macro") or rs.Remote:FindFirstChildWhichIsA("RemoteEvent", true)
-            if macro then macro:Destroy() end
-        end
-    end)
-    
-    pcall(function()
-        for _, g in pairs(LocalPlayer.PlayerGui:GetChildren()) do
-            if g:IsA("ScreenGui") and (g.Name:find("Mecha") or g.Name:find("Macro") or g.Name:find("Captcha")) then
-                g:Destroy()
-            end
-        end
-    end)
-    debug("Nuclear Eliminator ทำงานแล้ว (อาจถูกเตะ)")
-end)
-
-print("Mecha Prevention Solver Standalone โหลดเสร็จ!")
-print("เปิด UI ด้วย RightControl หรือตาม default ของ Kavo")
+print("Mecha Solver Debug Mode โหลดแล้ว - ดู console ด้วย warn")
