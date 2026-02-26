@@ -1,0 +1,107 @@
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local LocalPlayer = game.Players.LocalPlayer
+
+local Enabled = true  -- เปลี่ยนเป็น false เพื่อปิด
+local IsSolving = false
+local LastTime = 0
+
+local function debug(msg)
+    print("[Direct Solver] " .. msg)
+end
+
+local function FindMacroGui()
+    local pg = LocalPlayer:WaitForChild("PlayerGui")
+    for _, sg in pairs(pg:GetChildren()) do
+        if sg:IsA("ScreenGui") and sg.Name == "MacroGui" and sg.Enabled then
+            debug("พบ MacroGui")
+            local code = nil
+            for _, obj in pairs(sg:GetDescendants()) do
+                if obj:IsA("TextLabel") and obj.Text:find("다음 숫자를 입력해주세요") then
+                    local text = obj.Text
+                    code = text:match("%d%d%d%d%d?%d?")
+                    if code then
+                        debug("ดึง code: " .. code)
+                        return code, sg
+                    end
+                end
+            end
+        end
+    end
+    return nil, nil
+end
+
+local function SolveDirect()
+    if IsSolving or tick() - LastTime < 2 then return end
+    IsSolving = true
+    LastTime = tick()
+    
+    local code, gui = FindMacroGui()
+    if not code then
+        IsSolving = false
+        return
+    end
+    
+    debug("ลองส่ง code ตรง: " .. code)
+    
+    -- ลอง Fire Remote โดยตรง
+    pcall(function()
+        local remote = ReplicatedStorage:FindFirstChild("Remote")
+        if remote and remote:FindFirstChild("Macro") then
+            remote.Macro:FireServer(code)
+            debug("FireServer(code) สำเร็จ")
+        else
+            debug("ไม่พบ Remote.Macro")
+        end
+    end)
+    
+    -- ถ้าไม่ผ่าน ลอง InvokeServer ถ้ามี
+    pcall(function()
+        local remote = ReplicatedStorage:FindFirstChild("Remote")
+        if remote and remote:FindFirstChild("Macro") and remote.Macro:IsA("RemoteFunction") then
+            remote.Macro:InvokeServer(code)
+            debug("InvokeServer(code) สำเร็จ")
+        end
+    end)
+    
+    task.wait(0.5)
+    
+    -- ปิด GUI ถ้ามีปุ่ม X
+    pcall(function()
+        for _, b in pairs(gui:GetDescendants()) do
+            if b:IsA("TextButton") and (b.Text == "X" or b.Text == "×" or b.Text:find("닫기")) then
+                b:Fire("MouseButton1Click")
+                debug("ปิด GUI")
+            end
+        end
+    end)
+    
+    IsSolving = false
+end
+
+local Connection
+local function StartLoop()
+    if Connection then Connection:Disconnect() end
+    local last = 0
+    Connection = RunService.Heartbeat:Connect(function()
+        if tick() - last >= 1 then
+            last = tick()
+            if Enabled and not IsSolving then
+                SolveDirect()
+            end
+        end
+    end)
+    debug("Loop เริ่ม - ส่งตรง")
+end
+
+local function StopLoop()
+    if Connection then
+        Connection:Disconnect()
+        Connection = nil
+    end
+end
+
+-- เริ่ม loop
+StartLoop()
+
+-- ถ้าต้องการปิด: Enabled = false; StopLoop()
